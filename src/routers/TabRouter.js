@@ -231,7 +231,8 @@ export default (
         if (tabState !== routes[i]) {
           routes = [...routes];
           routes[i] = tabState;
-          index = i;
+          // change index only for Drawer actions
+          index = tabState.key === 'DrawerOpen' || tabState.key === 'DrawerClose' ? i : index;
           return true;
         }
         return false;
