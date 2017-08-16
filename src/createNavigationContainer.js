@@ -42,6 +42,7 @@ export default function createNavigationContainer<S: *, O>(
   class NavigationContainer extends React.Component<void, Props<O, S>, State> {
     state: State;
     props: Props<O, S>;
+    queuedActions: Array<NavigationAction, any>;
 
     subs: ?{
       remove: () => void,
@@ -53,6 +54,8 @@ export default function createNavigationContainer<S: *, O>(
       super(props);
 
       this._validateProps(props);
+
+      this.queuedActions = [];
 
       this.state = {
         nav: this._isStateful()
@@ -169,20 +172,39 @@ export default function createNavigationContainer<S: *, O>(
       this.subs && this.subs.remove();
     }
 
-    dispatch = (action: NavigationAction) => {
-      const { state } = this;
+    dispatch = (action: NavigationAction, completionHandler: any = null) => {
       if (!this._isStateful()) {
         return false;
       }
+      this.queuedActions.push({action, completionHandler});
+      if(this.queuedActions.length === 1) {
+        // dispatch now if first in queue
+        this.dispatchQueued(action, completionHandler);
+      }
+    }
+
+    dispatchQueued = (action: NavigationAction, completionHandler: any = null) => {
+      const { state } = this;
       const nav = Component.router.getStateForAction(action, state.nav);
       if (nav && nav !== state.nav) {
-        this.setState({ nav }, () =>
-          this._onNavigationStateChange(state.nav, nav, action)
-        );
+        this.setState({ nav }, () => {
+          completionHandler && completionHandler(state.nav, nav, action);
+          this._onNavigationStateChange(state.nav, nav, action);
+          this.dispatchNextInQueue();
+        });
         return true;
       }
+      this.dispatchNextInQueue();
       return false;
     };
+
+    dispatchNextInQueue() {
+      this.queuedActions.shift(); // remove finished from queue
+      if (this.queuedActions.length > 0) {
+        const {action, completionHandler} = this.queuedActions[0];
+        this.dispatchQueued(action, completionHandler);
+      }
+    }
 
     _navigation: ?NavigationScreenProp<NavigationRoute, NavigationAction>;
 
